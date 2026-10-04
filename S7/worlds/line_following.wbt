@@ -1,0 +1,120 @@
+#VRML_SIM R2023b utf8
+
+# ===========================================================================
+#  Assignment 2 -- e-puck line following + wheel-encoder odometry
+# ===========================================================================
+#  The robot drives one lap of a closed loop and estimates its own pose in
+#  world coordinates from the wheel encoders alone.  The loop passes through
+#  the world origin, so the assignment's score -- the Euclidean distance of
+#  the final estimate from (0, 0) -- is measured against the start line.
+#
+#  Coordinate system: R2023b's default ENU.  +x east, +y north, +z up.
+#  Robots use FLU, so the e-puck's own +x is "forward" and +z is "up".
+# ===========================================================================
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/gctronic/e-puck/protos/E-puck.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/gctronic/e-puck/protos/E-puckGroundSensors.proto"
+
+WorldInfo {
+  info [
+    "E-puck follows a closed black line and integrates wheel-encoder odometry"
+    "to estimate xw, yw and omegaz relative to the start line at the origin."
+  ]
+  title "E-puck odometry on a line-following track"
+  # 16 ms rather than the usual 32 ms: odometry is a numerical integration, and
+  # halving the step halves the arc-vs-chord error committed on every corner.
+  # It also doubles the ground-sensor sampling rate, which makes the
+  # proportional steering noticeably smoother.
+  basicTimeStep 16
+  coordinateSystem "ENU"
+}
+
+# Camera looking down at 45 degrees from the south, aimed at the middle of the
+# loop (0.45, 0, 0).  orientation is a 45 deg tilt about the world x axis.
+Viewpoint {
+  orientation 1 0 0 0.7853982
+  position 0.45 -1.95 1.95
+}
+
+TexturedBackground {
+}
+
+# Shadows are switched off so the whole floor is lit evenly.  (The e-puck's
+# ground sensors are "infra-red" DistanceSensors: their reading is scaled by
+# the *colour of the surface* they hit, not by scene luminance, so lighting
+# does not actually change the sensor values -- but an evenly lit floor makes
+# the run readable for a human watching it.)
+TexturedBackgroundLight {
+  castShadows FALSE
+}
+
+# A second light pointing straight down, so the black-on-white contrast of the
+# track is unambiguous everywhere on the floor rather than falling off towards
+# the edges.
+DirectionalLight {
+  direction 0 0 -1
+  intensity 1
+  castShadows FALSE
+}
+
+# ---------------------------------------------------------------------------
+# The track.
+#
+#   size     2 2   -> a 2 m x 2 m floor spanning x,y in [-1, +1].
+#   tileSize 2 2   -> CRITICAL.  Floor's default tileSize is 0.5 0.5, which
+#                     repeats the texture 4 x 4 times and would give four
+#                     little tracks instead of one.  Setting tileSize equal to
+#                     size maps the PNG exactly once over the whole floor, so
+#                     1 texture pixel = 0.977 mm of floor (2048 px / 2 m).
+#   url            -> RELATIVE path, as required by the submission rules.  The
+#                     texture lives inside this project at
+#                     worlds/textures/line_following.png and the path is
+#                     resolved relative to this .wbt file.
+# ---------------------------------------------------------------------------
+Floor {
+  size 2 2
+  tileSize 2 2
+  appearance PBRAppearance {
+    baseColorMap ImageTexture {
+      url [
+        "textures/line_following.png"
+      ]
+    }
+    roughness 1
+    metalness 0
+  }
+}
+
+# ---------------------------------------------------------------------------
+# The robot.
+#
+#   translation 0 0.028 0
+#       ENU, so this is x = 0, y = 0.028, z = 0 (the e-puck proto's origin sits
+#       on the ground plane).  The loop's west straight lies exactly on x = 0
+#       and runs north-south, so the robot is sitting ON the line, 2.8 cm past
+#       the start line at the origin -- "slightly in front of the start line".
+#
+#   rotation 0 0 1 1.5707963
+#       +90 deg about the world z axis.  The robot's FLU forward axis (+x) is
+#       therefore mapped onto world +y, i.e. the robot faces NORTH, straight
+#       along the line.  The controller must be initialised with
+#       omegaz = +pi/2 to match this; it is.
+#
+#   groundSensorsSlot
+#       Adds the E-puckGroundSensors module, which provides the three
+#       downward-facing infra-red DistanceSensors named gs0 (left), gs1
+#       (centre) and gs2 (right) used for line following.
+# ---------------------------------------------------------------------------
+E-puck {
+  translation 0 0.028 0
+  rotation 0 0 1 1.5707963
+  name "e-puck"
+  controller "odometry_controller"
+  groundSensorsSlot [
+    E-puckGroundSensors {
+    }
+  ]
+}
